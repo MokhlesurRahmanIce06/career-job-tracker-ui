@@ -1295,10 +1295,7 @@ function EditJob({
                 )
               }
               options={[
-                "Remote",
-                "Relocate",
-                "Local",
-                "Hybrid",
+                "Remote", "Relocate", "Hybrid", "Local", "On-site", "Contract",
               ]}
             />
 
@@ -1321,14 +1318,17 @@ function EditJob({
                 )
               }
               options={[
-                "Applied",
-                "HR Screening",
-                "Interview",
-                "Offer",
-                "Rejected",
-                "Withdrawn",
-                "On Hold",
-                "Selected",
+                  "Applied",
+                  "HR Screening",
+                  "Screening",
+                  "Interview",
+                  "Technical Interview",
+                  "Final Interview",
+                  "Offer",
+                  "Selected",
+                  "Rejected",
+                  "Withdrawn",
+                  "On Hold",
               ]}
             />
 
