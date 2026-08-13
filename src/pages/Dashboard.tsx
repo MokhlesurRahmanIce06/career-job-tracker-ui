@@ -13,6 +13,7 @@ interface DashboardProps {
 
 function Dashboard({ onLogout }: DashboardProps) {
   const [jobs, setJobs] = useState<JobApplication[]>([]);
+  const [filteredJobs, setFilteredJobs] = useState<JobApplication[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
@@ -20,6 +21,34 @@ function Dashboard({ onLogout }: DashboardProps) {
   const [showAddJob, setShowAddJob] = useState(false);
   const [showEditJob, setShowEditJob] = useState(false);
   const [savingJob, setSavingJob] = useState(false);
+
+  /* =====================================================
+     WINDOW SIZE FOR RESPONSIVE
+     ===================================================== */
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+
+  useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  const isMobile = windowWidth < 768;
+  const isTablet = windowWidth >= 768 && windowWidth < 1024;
+
+  /* =====================================================
+     SEARCH / FILTER STATE
+     ===================================================== */
+  const [searchDesignation, setSearchDesignation] = useState("");
+  const [searchCompany, setSearchCompany] = useState("");
+  const [searchCountry, setSearchCountry] = useState("");
+  const [searchJobType, setSearchJobType] = useState("");
+  const [searchStatus, setSearchStatus] = useState("");
+  const [searchPriority, setSearchPriority] = useState("");
+  const [searchDateFrom, setSearchDateFrom] = useState("");
+  const [searchDateTo, setSearchDateTo] = useState("");
+
+  const [isFilterActive, setIsFilterActive] = useState(false);
 
   useEffect(() => {
     void loadJobs(true);
@@ -56,6 +85,109 @@ function Dashboard({ onLogout }: DashboardProps) {
   };
 
   /* =====================================================
+     FILTER JOBS
+     ===================================================== */
+  const filterJobs = (jobsToFilter: JobApplication[]) => {
+    let filtered = [...jobsToFilter];
+
+    if (searchDesignation.trim()) {
+      const keyword = searchDesignation.trim().toLowerCase();
+      filtered = filtered.filter((job) =>
+        job.designation?.toLowerCase().includes(keyword)
+      );
+    }
+
+    if (searchCompany.trim()) {
+      const keyword = searchCompany.trim().toLowerCase();
+      filtered = filtered.filter((job) =>
+        job.company?.toLowerCase().includes(keyword)
+      );
+    }
+
+    if (searchCountry.trim()) {
+      const keyword = searchCountry.trim().toLowerCase();
+      filtered = filtered.filter((job) =>
+        job.country?.toLowerCase().includes(keyword)
+      );
+    }
+
+    if (searchJobType) {
+      filtered = filtered.filter((job) => job.jobType === searchJobType);
+    }
+
+    if (searchStatus) {
+      filtered = filtered.filter((job) => job.status === searchStatus);
+    }
+
+    if (searchPriority) {
+      filtered = filtered.filter((job) => job.priority === searchPriority);
+    }
+
+    if (searchDateFrom) {
+      const fromDate = new Date(searchDateFrom);
+      filtered = filtered.filter((job) => {
+        const jobDate = new Date(job.applicationDate || job.createdAt || "");
+        return jobDate >= fromDate;
+      });
+    }
+
+    if (searchDateTo) {
+      const toDate = new Date(searchDateTo);
+      toDate.setHours(23, 59, 59, 999);
+      filtered = filtered.filter((job) => {
+        const jobDate = new Date(job.applicationDate || job.createdAt || "");
+        return jobDate <= toDate;
+      });
+    }
+
+    return sortJobs(filtered);
+  };
+
+  /* =====================================================
+     APPLY FILTER
+     ===================================================== */
+  const applyFilter = () => {
+    const filtered = filterJobs(jobs);
+    setFilteredJobs(filtered);
+    setIsFilterActive(
+      !!(searchDesignation || searchCompany || searchCountry || 
+         searchJobType || searchStatus || searchPriority || 
+         searchDateFrom || searchDateTo)
+    );
+
+    if (selectedJob) {
+      const stillExists = filtered.some((job) => job.id === selectedJob.id);
+      if (!stillExists) {
+        setSelectedJob(filtered.length > 0 ? filtered[0] : null);
+      }
+    } else {
+      setSelectedJob(filtered.length > 0 ? filtered[0] : null);
+    }
+  };
+
+  /* =====================================================
+     CLEAR FILTER
+     ===================================================== */
+  const clearFilter = () => {
+    setSearchDesignation("");
+    setSearchCompany("");
+    setSearchCountry("");
+    setSearchJobType("");
+    setSearchStatus("");
+    setSearchPriority("");
+    setSearchDateFrom("");
+    setSearchDateTo("");
+    setIsFilterActive(false);
+    setFilteredJobs(sortJobs(jobs));
+    
+    if (jobs.length > 0) {
+      setSelectedJob(jobs[0]);
+    } else {
+      setSelectedJob(null);
+    }
+  };
+
+  /* =====================================================
      LOAD JOBS
      ===================================================== */
   const loadJobs = async (initialLoad = false) => {
@@ -70,6 +202,7 @@ function Dashboard({ onLogout }: DashboardProps) {
       const data = await readAllJobs<JobApplication>();
       const sortedJobs = sortJobs(data);
       setJobs(sortedJobs);
+      setFilteredJobs(sortedJobs);
 
       setSelectedJob((currentSelected) => {
         if (!currentSelected) {
@@ -103,6 +236,7 @@ function Dashboard({ onLogout }: DashboardProps) {
         return sortJobs([newJob, ...currentJobs]);
       });
       setSelectedJob(newJob);
+      setTimeout(() => applyFilter(), 100);
     }
     await loadJobs(false);
   };
@@ -128,6 +262,9 @@ function Dashboard({ onLogout }: DashboardProps) {
       );
       setSelectedJob(jobToSave);
       setShowEditJob(false);
+      
+      setTimeout(() => applyFilter(), 100);
+      
       alert(`✅ ${jobToSave.id} updated successfully on GitHub.`);
     } catch (err) {
       console.error("Failed to update job:", err);
@@ -231,6 +368,15 @@ function Dashboard({ onLogout }: DashboardProps) {
   /* =====================================================
      DASHBOARD
      ===================================================== */
+  const displayJobs = isFilterActive ? filteredJobs : jobs;
+
+  // Responsive styles
+  const headerFlexDirection = isMobile ? "column" : "row";
+  const headerGap = isMobile ? "10px" : "0";
+  const filterColumns = isMobile ? "1fr" : isTablet ? "1fr 1fr" : "1fr 1fr 1fr 1fr";
+  const kpiColumns = isMobile ? "1fr 1fr" : isTablet ? "1fr 1fr 1fr" : "1fr 1fr 1fr 1fr 1fr";
+  const mainLayout = isMobile ? "column" : "row";
+
   return (
     <div
       style={{
@@ -239,32 +385,37 @@ function Dashboard({ onLogout }: DashboardProps) {
         fontFamily: "Arial, sans-serif",
       }}
     >
-      {/* HEADER */}
+      {/* HEADER - Responsive */}
       <header
         style={{
           background: "#24292f",
           color: "#ffffff",
-          padding: "18px 30px",
+          padding: isMobile ? "15px 20px" : "18px 30px",
           display: "flex",
+          flexDirection: headerFlexDirection as any,
           justifyContent: "space-between",
-          alignItems: "center",
+          alignItems: isMobile ? "flex-start" : "center",
+          gap: headerGap,
         }}
       >
         <div>
-          <h2 style={{ margin: 0 }}>💼 Mokhlesur Career Job Tracker</h2>
-          <div style={{ fontSize: "13px", opacity: 0.75, marginTop: "5px" }}>
+          <h2 style={{ margin: 0, fontSize: isMobile ? "16px" : "24px" }}>
+            💼 Mokhlesur Career Job Tracker
+          </h2>
+          <div style={{ fontSize: isMobile ? "11px" : "13px", opacity: 0.75, marginTop: "3px" }}>
             GitHub-powered Career Management
           </div>
         </div>
         <button
           onClick={onLogout}
           style={{
-            padding: "9px 16px",
+            padding: isMobile ? "6px 12px" : "9px 16px",
             border: "1px solid #ffffff55",
             borderRadius: "7px",
             background: "transparent",
             color: "#ffffff",
             cursor: "pointer",
+            fontSize: isMobile ? "12px" : "14px",
           }}
         >
           Logout
@@ -272,84 +423,263 @@ function Dashboard({ onLogout }: DashboardProps) {
       </header>
 
       {/* MAIN */}
-      <main style={{ maxWidth: "1400px", margin: "0 auto", padding: "30px 20px" }}>
-        {/* TITLE */}
+      <main style={{ maxWidth: "1400px", margin: "0 auto", padding: isMobile ? "12px 10px" : "30px 20px" }}>
+        {/* TITLE - Responsive */}
         <div
           style={{
             display: "flex",
+            flexDirection: isMobile ? "column" : "row",
             justifyContent: "space-between",
-            alignItems: "center",
-            gap: "20px",
-            marginBottom: "25px",
+            alignItems: isMobile ? "flex-start" : "center",
+            gap: isMobile ? "10px" : "20px",
+            marginBottom: isMobile ? "15px" : "25px",
             flexWrap: "wrap",
           }}
         >
           <div>
-            <h1 style={{ margin: 0 }}>Career Dashboard</h1>
-            <p style={{ color: "#666" }}>
+            <h1 style={{ margin: 0, fontSize: isMobile ? "20px" : "32px" }}>
+              Career Dashboard
+            </h1>
+            <p style={{ color: "#666", fontSize: isMobile ? "12px" : "14px", margin: "4px 0 0" }}>
               All job applications are loaded directly from your private GitHub repository.
+              {isFilterActive && (
+                <span style={{ color: "#2563eb", marginLeft: "8px", display: "inline-block" }}>
+                  🔍 {filteredJobs.length} results found
+                </span>
+              )}
             </p>
           </div>
-          <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
-            {refreshing && <span style={{ color: "#666", fontSize: "12px" }}>🔄 Syncing GitHub...</span>}
-            {savingJob && <span style={{ color: "#2563eb", fontSize: "12px" }}>💾 Saving...</span>}
-            <button onClick={() => setShowAddJob(true)} style={primaryButton}>
-              ➕ Add New Job
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+            {refreshing && <span style={{ color: "#666", fontSize: "11px" }}>🔄 Syncing...</span>}
+            {savingJob && <span style={{ color: "#2563eb", fontSize: "11px" }}>💾 Saving...</span>}
+            <button onClick={() => setShowAddJob(true)} style={{ ...primaryButton, padding: isMobile ? "6px 12px" : "11px 18px", fontSize: isMobile ? "12px" : "14px" }}>
+              ➕ Add
             </button>
-            <button onClick={() => void loadJobs(false)} style={secondaryButton}>
+            <button onClick={() => void loadJobs(false)} style={{ ...secondaryButton, padding: isMobile ? "6px 12px" : "11px 18px", fontSize: isMobile ? "12px" : "14px" }}>
               🔄 Refresh
             </button>
           </div>
         </div>
 
-        {/* KPI */}
+        {/* SEARCH / FILTER BAR - Fully Responsive */}
+        <div
+          style={{
+            background: "#ffffff",
+            borderRadius: "14px",
+            padding: isMobile ? "12px" : "20px",
+            marginBottom: isMobile ? "15px" : "25px",
+            boxShadow: "0 4px 18px rgba(0,0,0,0.06)",
+          }}
+        >
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: filterColumns,
+              gap: isMobile ? "8px" : "12px",
+              marginBottom: isMobile ? "8px" : "12px",
+            }}
+          >
+            <FilterInput
+              label="Designation"
+              value={searchDesignation}
+              onChange={setSearchDesignation}
+              placeholder="Search..."
+              isMobile={isMobile}
+            />
+            <FilterInput
+              label="Company"
+              value={searchCompany}
+              onChange={setSearchCompany}
+              placeholder="Search..."
+              isMobile={isMobile}
+            />
+            <FilterInput
+              label="Country"
+              value={searchCountry}
+              onChange={setSearchCountry}
+              placeholder="Search..."
+              isMobile={isMobile}
+            />
+            <FilterSelect
+              label="Job Type"
+              value={searchJobType}
+              onChange={setSearchJobType}
+              options={["", "Remote", "Relocate", "Hybrid", "Local", "On-site", "Contract"]}
+              isMobile={isMobile}
+            />
+            <FilterSelect
+              label="Status"
+              value={searchStatus}
+              onChange={setSearchStatus}
+              options={[
+                "",
+                "Applied",
+                "HR Screening",
+                "Screening",
+                "Interview",
+                "Technical Interview",
+                "Final Interview",
+                "Offer",
+                "Selected",
+                "Rejected",
+                "Withdrawn",
+                "On Hold",
+              ]}
+              isMobile={isMobile}
+            />
+            <FilterSelect
+              label="Priority"
+              value={searchPriority}
+              onChange={setSearchPriority}
+              options={["", "High", "Medium", "Low"]}
+              isMobile={isMobile}
+            />
+            <FilterInput
+              label="Date From"
+              value={searchDateFrom}
+              onChange={setSearchDateFrom}
+              type="date"
+              isMobile={isMobile}
+            />
+            <FilterInput
+              label="Date To"
+              value={searchDateTo}
+              onChange={setSearchDateTo}
+              type="date"
+              isMobile={isMobile}
+            />
+          </div>
+
+          {/* Action Buttons - Responsive */}
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "8px",
+              justifyContent: isMobile ? "stretch" : "flex-end",
+              borderTop: "1px solid #e5e7eb",
+              paddingTop: isMobile ? "8px" : "12px",
+            }}
+          >
+            <button
+              onClick={applyFilter}
+              style={{
+                padding: isMobile ? "8px 12px" : "9px 20px",
+                border: "none",
+                borderRadius: "8px",
+                background: "#2563eb",
+                color: "#ffffff",
+                cursor: "pointer",
+                fontWeight: 600,
+                fontSize: isMobile ? "12px" : "13px",
+                flex: isMobile ? "1" : "0",
+                minWidth: isMobile ? "80px" : "auto",
+              }}
+            >
+              🔍 Apply Filter
+            </button>
+
+            {isFilterActive && (
+              <button
+                onClick={clearFilter}
+                style={{
+                  padding: isMobile ? "8px 12px" : "9px 20px",
+                  border: "1px solid #dc2626",
+                  borderRadius: "8px",
+                  background: "transparent",
+                  color: "#dc2626",
+                  cursor: "pointer",
+                  fontWeight: 600,
+                  fontSize: isMobile ? "12px" : "13px",
+                  flex: isMobile ? "1" : "0",
+                  minWidth: isMobile ? "80px" : "auto",
+                }}
+              >
+                ✕ Clear All
+              </button>
+            )}
+          </div>
+
+          {/* Active Filter Tags - Responsive */}
+          {isFilterActive && (
+            <div
+              style={{
+                marginTop: isMobile ? "8px" : "10px",
+                fontSize: isMobile ? "10px" : "11px",
+                color: "#666",
+                display: "flex",
+                flexWrap: "wrap",
+                gap: isMobile ? "4px" : "6px",
+              }}
+            >
+              <span>Active:</span>
+              {searchDesignation && <span style={filterTagStyle}>Des: {searchDesignation}</span>}
+              {searchCompany && <span style={filterTagStyle}>Co: {searchCompany}</span>}
+              {searchCountry && <span style={filterTagStyle}>Country: {searchCountry}</span>}
+              {searchJobType && <span style={filterTagStyle}>Type: {searchJobType}</span>}
+              {searchStatus && <span style={filterTagStyle}>Status: {searchStatus}</span>}
+              {searchPriority && <span style={filterTagStyle}>Priority: {searchPriority}</span>}
+              {searchDateFrom && <span style={filterTagStyle}>From: {searchDateFrom}</span>}
+              {searchDateTo && <span style={filterTagStyle}>To: {searchDateTo}</span>}
+            </div>
+          )}
+        </div>
+
+        {/* KPI - Responsive Grid */}
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-            gap: "15px",
-            marginBottom: "25px",
+            gridTemplateColumns: kpiColumns,
+            gap: isMobile ? "8px" : "15px",
+            marginBottom: isMobile ? "15px" : "25px",
           }}
         >
-          <KpiCard title="Total Applications" value={jobs.length} icon="📊" />
+          <KpiCard title="Total" value={displayJobs.length} icon="📊" isMobile={isMobile} />
           <KpiCard
             title="Applied"
-            value={jobs.filter((job) => job.status?.toLowerCase() === "applied").length}
+            value={displayJobs.filter((job) => job.status?.toLowerCase() === "applied").length}
             icon="📨"
+            isMobile={isMobile}
           />
           <KpiCard
             title="Interview"
-            value={jobs.filter((job) => job.status?.toLowerCase().includes("interview")).length}
+            value={displayJobs.filter((job) => job.status?.toLowerCase().includes("interview")).length}
             icon="🎤"
+            isMobile={isMobile}
           />
           <KpiCard
             title="Offer"
-            value={jobs.filter((job) => job.status?.toLowerCase().includes("offer")).length}
+            value={displayJobs.filter((job) => job.status?.toLowerCase().includes("offer")).length}
             icon="🎉"
+            isMobile={isMobile}
           />
           <KpiCard
             title="Selected"
-            value={jobs.filter((job) => job.status?.toLowerCase() === "selected").length}
+            value={displayJobs.filter((job) => job.status?.toLowerCase() === "selected").length}
             icon="🏆"
+            isMobile={isMobile}
           />
         </div>
 
-        {/* JOB LIST + DETAILS */}
+        {/* JOB LIST + DETAILS - Responsive */}
         <div
           style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(300px, 380px) minmax(0, 1fr)",
-            gap: "20px",
-            alignItems: "start",
+            display: "flex",
+            flexDirection: mainLayout as any,
+            gap: isMobile ? "12px" : "20px",
           }}
         >
-          {/* LEFT - Job List */}
+          {/* LEFT - Job List (Full width on mobile) */}
           <section
             style={{
               background: "#ffffff",
               borderRadius: "14px",
-              padding: "20px",
+              padding: isMobile ? "12px" : "20px",
               boxShadow: "0 4px 18px rgba(0,0,0,0.06)",
+              width: isMobile ? "100%" : "minmax(300px, 380px)",
+              flex: isMobile ? "none" : "0 0 380px",
+              maxHeight: isMobile ? "300px" : "600px",
+              overflowY: "auto",
             }}
           >
             <div
@@ -357,23 +687,38 @@ function Dashboard({ onLogout }: DashboardProps) {
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "center",
-                marginBottom: "15px",
+                marginBottom: isMobile ? "10px" : "15px",
+                flexWrap: "wrap",
+                gap: "5px",
               }}
             >
-              <h3 style={{ margin: 0 }}>📋 Applications</h3>
-              <span style={{ fontSize: "12px", color: "#666" }}>{jobs.length} jobs</span>
+              <h3 style={{ margin: 0, fontSize: isMobile ? "15px" : "18px" }}>📋 Applications</h3>
+              <span style={{ fontSize: isMobile ? "10px" : "12px", color: "#666" }}>
+                {displayJobs.length} jobs {isFilterActive && "(filtered)"}
+              </span>
             </div>
 
-            {jobs.length === 0 ? (
-              <div style={{ padding: "30px 10px", textAlign: "center", color: "#777" }}>
+            {displayJobs.length === 0 ? (
+              <div style={{ padding: "20px 10px", textAlign: "center", color: "#777" }}>
                 <div style={{ fontSize: "35px" }}>📭</div>
-                <p>No job applications found.</p>
-                <button onClick={() => setShowAddJob(true)} style={primaryButton}>
-                  Add First Job
-                </button>
+                <p style={{ fontSize: isMobile ? "13px" : "15px" }}>
+                  {isFilterActive 
+                    ? "No jobs match your filter criteria." 
+                    : "No job applications found."}
+                </p>
+                {isFilterActive && (
+                  <button onClick={clearFilter} style={{ ...secondaryButton, marginTop: "10px", padding: isMobile ? "6px 12px" : "11px 18px", fontSize: isMobile ? "12px" : "14px" }}>
+                    ✕ Clear Filters
+                  </button>
+                )}
+                {!isFilterActive && (
+                  <button onClick={() => setShowAddJob(true)} style={{ ...primaryButton, padding: isMobile ? "6px 12px" : "11px 18px", fontSize: isMobile ? "12px" : "14px" }}>
+                    Add First Job
+                  </button>
+                )}
               </div>
             ) : (
-              jobs.map((job) => (
+              displayJobs.map((job) => (
                 <button
                   key={job.id}
                   type="button"
@@ -388,28 +733,31 @@ function Dashboard({ onLogout }: DashboardProps) {
                     border: selectedJob?.id === job.id ? "2px solid #24292f" : "1px solid #e5e7eb",
                     background: selectedJob?.id === job.id ? "#f6f8fa" : "#ffffff",
                     borderRadius: "10px",
-                    padding: "14px",
-                    marginBottom: "10px",
+                    padding: isMobile ? "10px 12px" : "14px",
+                    marginBottom: isMobile ? "6px" : "10px",
                     cursor: "pointer",
+                    fontSize: isMobile ? "13px" : "14px",
                   }}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: "10px" }}>
-                    <strong>{job.designation}</strong>
-                    <span style={{ fontSize: "11px", color: "#666" }}>{job.id}</span>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}>
+                    <strong style={{ fontSize: isMobile ? "13px" : "15px" }}>{job.designation}</strong>
+                    <span style={{ fontSize: "10px", color: "#666" }}>{job.id}</span>
                   </div>
-                  <div style={{ marginTop: "6px", fontSize: "14px" }}>🏢 {job.company || "Company not specified"}</div>
-                  <div style={{ marginTop: "4px", color: "#666", fontSize: "13px" }}>
+                  <div style={{ marginTop: "4px", fontSize: isMobile ? "12px" : "14px" }}>
+                    🏢 {job.company || "Company not specified"}
+                  </div>
+                  <div style={{ marginTop: "2px", color: "#666", fontSize: isMobile ? "11px" : "13px" }}>
                     📍 {job.country || "Country not specified"}
                   </div>
-                  <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "10px" }}>
+                  <div style={{ display: "flex", gap: "5px", flexWrap: "wrap", marginTop: "6px" }}>
                     <span
                       style={{
                         display: "inline-block",
-                        padding: "4px 9px",
+                        padding: "2px 8px",
                         borderRadius: "12px",
                         background: "#e7f5e9",
                         color: "#176b2c",
-                        fontSize: "11px",
+                        fontSize: isMobile ? "9px" : "11px",
                         fontWeight: 600,
                       }}
                     >
@@ -418,57 +766,79 @@ function Dashboard({ onLogout }: DashboardProps) {
                     <span
                       style={{
                         display: "inline-block",
-                        padding: "4px 9px",
+                        padding: "2px 8px",
                         borderRadius: "12px",
                         background: "#eef2ff",
                         color: "#3730a3",
-                        fontSize: "11px",
+                        fontSize: isMobile ? "9px" : "11px",
                         fontWeight: 600,
                       }}
                     >
                       {job.jobType || "Not specified"}
                     </span>
+                    {job.priority && (
+                      <span
+                        style={{
+                          display: "inline-block",
+                          padding: "2px 8px",
+                          borderRadius: "12px",
+                          background: 
+                            job.priority === "High" ? "#fef2f2" : 
+                            job.priority === "Medium" ? "#fffbeb" : "#f3f4f6",
+                          color:
+                            job.priority === "High" ? "#dc2626" :
+                            job.priority === "Medium" ? "#d97706" : "#6b7280",
+                          fontSize: isMobile ? "9px" : "11px",
+                          fontWeight: 600,
+                        }}
+                      >
+                        {job.priority}
+                      </span>
+                    )}
                   </div>
                 </button>
               ))
             )}
           </section>
 
-          {/* RIGHT - Job Details */}
-          <section>
+          {/* RIGHT - Job Details (Full width on mobile) */}
+          <section style={{ width: isMobile ? "100%" : "auto", flex: isMobile ? "none" : "1" }}>
             {selectedJob ? (
-              <JobDetails job={selectedJob} onEdit={handleEditJob} />
+              <JobDetails job={selectedJob} onEdit={handleEditJob} isMobile={isMobile} />
             ) : (
               <div
                 style={{
                   background: "#ffffff",
-                  padding: "50px",
+                  padding: isMobile ? "20px" : "50px",
                   borderRadius: "14px",
                   textAlign: "center",
                   color: "#777",
+                  fontSize: isMobile ? "13px" : "15px",
                 }}
               >
-                Select a job application.
+                {displayJobs.length > 0 ? "Select a job application." : "No jobs to display."}
               </div>
             )}
           </section>
         </div>
 
-        {/* REPOSITORY */}
+        {/* REPOSITORY - Responsive */}
         <section
           style={{
-            marginTop: "25px",
+            marginTop: isMobile ? "15px" : "25px",
             background: "#24292f",
             color: "#ffffff",
             borderRadius: "14px",
-            padding: "22px",
+            padding: isMobile ? "12px 15px" : "22px",
           }}
         >
-          <strong>🗂️ GitHub Data Repository</strong>
-          <div style={{ marginTop: "8px", fontFamily: "monospace", fontSize: "13px" }}>
+          <strong style={{ fontSize: isMobile ? "13px" : "15px" }}>🗂️ GitHub Data Repository</strong>
+          <div style={{ marginTop: "5px", fontFamily: "monospace", fontSize: isMobile ? "11px" : "13px", wordBreak: "break-all" }}>
             MokhlesurRahmanIce06 / career-job-tracker-data
           </div>
-          <div style={{ marginTop: "5px", fontSize: "12px", opacity: 0.7 }}>Source: jobs/*.json</div>
+          <div style={{ marginTop: "3px", fontSize: isMobile ? "10px" : "12px", opacity: 0.7 }}>
+            Source: jobs/*.json
+          </div>
         </section>
       </main>
     </div>
@@ -476,189 +846,301 @@ function Dashboard({ onLogout }: DashboardProps) {
 }
 
 /* =========================================================
-   JOB DETAILS (সম্পূর্ণ কম্পোনেন্ট)
+   FILTER INPUT COMPONENT - Responsive
+   ========================================================= */
+function FilterInput({
+  label,
+  value,
+  onChange,
+  placeholder,
+  type = "text",
+  isMobile = false,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  type?: string;
+  isMobile?: boolean;
+}) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: isMobile ? "2px" : "3px" }}>
+      <label style={{ fontSize: isMobile ? "10px" : "12px", fontWeight: 600, color: "#374151" }}>{label}</label>
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        style={{
+          padding: isMobile ? "6px 8px" : "8px 10px",
+          border: "1px solid #d1d5db",
+          borderRadius: "6px",
+          fontSize: isMobile ? "12px" : "13px",
+          outline: "none",
+          background: "#ffffff",
+          width: "100%",
+          boxSizing: "border-box",
+          minHeight: isMobile ? "32px" : "36px",
+        }}
+      />
+    </div>
+  );
+}
+
+/* =========================================================
+   FILTER SELECT COMPONENT - Responsive
+   ========================================================= */
+function FilterSelect({
+  label,
+  value,
+  onChange,
+  options,
+  isMobile = false,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: string[];
+  isMobile?: boolean;
+}) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: isMobile ? "2px" : "3px" }}>
+      <label style={{ fontSize: isMobile ? "10px" : "12px", fontWeight: 600, color: "#374151" }}>{label}</label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        style={{
+          padding: isMobile ? "6px 8px" : "8px 10px",
+          border: "1px solid #d1d5db",
+          borderRadius: "6px",
+          fontSize: isMobile ? "12px" : "13px",
+          outline: "none",
+          background: "#ffffff",
+          width: "100%",
+          boxSizing: "border-box",
+          minHeight: isMobile ? "32px" : "36px",
+        }}
+      >
+        {options.map((option) => (
+          <option key={option || "empty"} value={option}>
+            {option || "All"}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+/* =========================================================
+   FILTER TAG STYLE
+   ========================================================= */
+const filterTagStyle: React.CSSProperties = {
+  display: "inline-block",
+  padding: "2px 8px",
+  background: "#eef2ff",
+  color: "#3730a3",
+  borderRadius: "12px",
+  fontSize: "10px",
+  fontWeight: 500,
+};
+
+/* =========================================================
+   JOB DETAILS (সম্পূর্ণ কম্পোনেন্ট - Responsive)
    ========================================================= */
 
 function JobDetails({
   job,
   onEdit,
+  isMobile = false,
 }: {
   job: JobApplication;
   onEdit: () => void;
+  isMobile?: boolean;
 }) {
   return (
     <div
       style={{
         background: "#ffffff",
         borderRadius: "14px",
-        padding: "28px",
+        padding: isMobile ? "16px" : "28px",
         boxShadow: "0 4px 18px rgba(0,0,0,0.06)",
+        maxHeight: isMobile ? "500px" : "none",
+        overflowY: isMobile ? "auto" : "visible",
       }}
     >
-      {/* HEADER */}
+      {/* HEADER - Responsive */}
       <div
         style={{
           display: "flex",
+          flexDirection: isMobile ? "column" : "row",
           justifyContent: "space-between",
-          alignItems: "flex-start",
-          gap: "15px",
+          alignItems: isMobile ? "flex-start" : "flex-start",
+          gap: isMobile ? "8px" : "15px",
           flexWrap: "wrap",
         }}
       >
         <div>
-          <div style={{ color: "#777", fontSize: "12px", fontFamily: "monospace" }}>{job.id}</div>
-          <h2 style={{ margin: "5px 0" }}>{job.designation || "Designation not specified"}</h2>
-          <strong>🏢 {job.company || "Company not specified"}</strong>
-          <div style={{ color: "#666", marginTop: "5px" }}>📍 {job.country || "Country not specified"}</div>
+          <div style={{ color: "#777", fontSize: isMobile ? "10px" : "12px", fontFamily: "monospace" }}>
+            {job.id}
+          </div>
+          <h2 style={{ margin: "4px 0", fontSize: isMobile ? "18px" : "24px" }}>
+            {job.designation || "Designation not specified"}
+          </h2>
+          <strong style={{ fontSize: isMobile ? "14px" : "16px" }}>
+            🏢 {job.company || "Company not specified"}
+          </strong>
+          <div style={{ color: "#666", marginTop: "3px", fontSize: isMobile ? "13px" : "14px" }}>
+            📍 {job.country || "Country not specified"}
+          </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px" }}>
           <span
             style={{
-              padding: "8px 14px",
+              padding: isMobile ? "4px 10px" : "8px 14px",
               borderRadius: "20px",
               background: "#e7f5e9",
               color: "#176b2c",
               fontWeight: 700,
-              fontSize: "13px",
+              fontSize: isMobile ? "12px" : "13px",
             }}
           >
             {job.status || "Unknown"}
           </span>
-          <button type="button" onClick={onEdit} style={primaryButton}>
-            ✏️ Edit Job
+          <button type="button" onClick={onEdit} style={{ ...primaryButton, padding: isMobile ? "6px 12px" : "11px 18px", fontSize: isMobile ? "12px" : "14px" }}>
+            ✏️ Edit
           </button>
         </div>
       </div>
 
-      <hr style={{ border: 0, borderTop: "1px solid #eee", margin: "22px 0" }} />
+      <hr style={{ border: 0, borderTop: "1px solid #eee", margin: isMobile ? "12px 0" : "22px 0" }} />
 
       {/* JOB INFORMATION */}
-      <DetailSection title="📌 Job Information">
+      <DetailSection title="📌 Job Information" isMobile={isMobile}>
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-            gap: "12px",
+            gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(auto-fit, minmax(180px, 1fr))",
+            gap: isMobile ? "8px" : "12px",
           }}
         >
-          <InfoCard title="Job Type" value={job.jobType || "Not specified"} />
-          <InfoCard title="Source" value={job.jobSource || "Not specified"} />
-          <InfoCard title="Application Date" value={job.applicationDate || "Not specified"} />
-          <InfoCard title="Recruiter" value={job.recruiter || "Not specified"} />
-          <InfoCard title="Job URL" value={job.jobUrl || "Not specified"} />
-          <InfoCard title="Priority" value={job.priority || "Not specified"} />
+          <InfoCard title="Job Type" value={job.jobType || "Not specified"} isMobile={isMobile} />
+          <InfoCard title="Source" value={job.jobSource || "Not specified"} isMobile={isMobile} />
+          <InfoCard title="Application Date" value={job.applicationDate || "Not specified"} isMobile={isMobile} />
+          <InfoCard title="Recruiter" value={job.recruiter || "Not specified"} isMobile={isMobile} />
+          <InfoCard title="Job URL" value={job.jobUrl || "Not specified"} isMobile={isMobile} />
+          <InfoCard title="Priority" value={job.priority || "Not specified"} isMobile={isMobile} />
         </div>
       </DetailSection>
 
       {/* JD */}
-      <DetailSection title="📝 Job Description">
-        <ContentBox value={job.jd || "No job description saved."} />
+      <DetailSection title="📝 Job Description" isMobile={isMobile}>
+        <ContentBox value={job.jd || "No job description saved."} isMobile={isMobile} />
       </DetailSection>
 
       {/* DOCUMENTS */}
-      <DetailSection title="📄 Documents Submitted">
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-          <Badge label="Resume" active={!!job.documentsSubmitted?.resume} />
-          <Badge label="Cover Letter" active={!!job.documentsSubmitted?.coverLetter} />
-          <Badge label="Portfolio" active={!!job.documentsSubmitted?.portfolio} />
-          <Badge label="Certificates" active={!!job.documentsSubmitted?.certificates} />
+      <DetailSection title="📄 Documents Submitted" isMobile={isMobile}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: isMobile ? "4px" : "8px" }}>
+          <Badge label="Resume" active={!!job.documentsSubmitted?.resume} isMobile={isMobile} />
+          <Badge label="Cover Letter" active={!!job.documentsSubmitted?.coverLetter} isMobile={isMobile} />
+          <Badge label="Portfolio" active={!!job.documentsSubmitted?.portfolio} isMobile={isMobile} />
+          <Badge label="Certificates" active={!!job.documentsSubmitted?.certificates} isMobile={isMobile} />
         </div>
-        <div style={{ marginTop: "14px" }}>
-          <strong>Other Documents</strong>
+        <div style={{ marginTop: isMobile ? "8px" : "14px" }}>
+          <strong style={{ fontSize: isMobile ? "13px" : "14px" }}>Other Documents</strong>
           {job.documentsSubmitted?.other?.length ? (
-            <TagGroup title="" items={job.documentsSubmitted.other} />
+            <TagGroup title="" items={job.documentsSubmitted.other} isMobile={isMobile} />
           ) : (
-            <div style={{ marginTop: "6px", color: "#999", fontSize: "13px" }}>None</div>
+            <div style={{ marginTop: "4px", color: "#999", fontSize: isMobile ? "11px" : "13px" }}>None</div>
           )}
         </div>
       </DetailSection>
 
       {/* PREPARATION */}
-      <DetailSection title="🎯 Preparation">
-        <TagGroup title="New Topics from JD" items={job.preparation?.newTopics || []} />
-        <TagGroup title="Known Topics" items={job.preparation?.knownTopics || []} />
-        <TagGroup title="Job Related Study / CV Alignment" items={job.preparation?.cvAlignment || []} />
+      <DetailSection title="🎯 Preparation" isMobile={isMobile}>
+        <TagGroup title="New Topics from JD" items={job.preparation?.newTopics || []} isMobile={isMobile} />
+        <TagGroup title="Known Topics" items={job.preparation?.knownTopics || []} isMobile={isMobile} />
+        <TagGroup title="Job Related Study / CV Alignment" items={job.preparation?.cvAlignment || []} isMobile={isMobile} />
       </DetailSection>
 
       {/* AI QUESTIONS */}
-      <DetailSection title="🤖 AI Generated Q&A">
-        <AIItem name="ChatGPT" value={job.aiQuestions?.chatgpt} />
-        <AIItem name="DeepSeek" value={job.aiQuestions?.deepseek} />
-        <AIItem name="Grok" value={job.aiQuestions?.grok} />
-        <AIItem name="Gemini" value={job.aiQuestions?.gemini} />
-        <AIItem name="Copilot" value={job.aiQuestions?.copilot} />
-        <AIItem name="Claude" value={job.aiQuestions?.claude} />
-        <AIItem name="Consolidated" value={job.aiQuestions?.consolidated} />
+      <DetailSection title="🤖 AI Generated Q&A" isMobile={isMobile}>
+        <AIItem name="ChatGPT" value={job.aiQuestions?.chatgpt} isMobile={isMobile} />
+        <AIItem name="DeepSeek" value={job.aiQuestions?.deepseek} isMobile={isMobile} />
+        <AIItem name="Grok" value={job.aiQuestions?.grok} isMobile={isMobile} />
+        <AIItem name="Gemini" value={job.aiQuestions?.gemini} isMobile={isMobile} />
+        <AIItem name="Copilot" value={job.aiQuestions?.copilot} isMobile={isMobile} />
+        <AIItem name="Claude" value={job.aiQuestions?.claude} isMobile={isMobile} />
+        <AIItem name="Consolidated" value={job.aiQuestions?.consolidated} isMobile={isMobile} />
       </DetailSection>
 
       {/* VIVA */}
-      <VivaDetails number={1} viva={job.viva1} />
-      <VivaDetails number={2} viva={job.viva2} />
-      <VivaDetails number={3} viva={job.viva3} />
-      <VivaDetails number={4} viva={job.viva4} />
-      <VivaDetails number={5} viva={job.viva5} />
+      <VivaDetails number={1} viva={job.viva1} isMobile={isMobile} />
+      <VivaDetails number={2} viva={job.viva2} isMobile={isMobile} />
+      <VivaDetails number={3} viva={job.viva3} isMobile={isMobile} />
+      <VivaDetails number={4} viva={job.viva4} isMobile={isMobile} />
+      <VivaDetails number={5} viva={job.viva5} isMobile={isMobile} />
 
       {/* COMPENSATION */}
-      <DetailSection title="💰 Compensation">
+      <DetailSection title="💰 Compensation" isMobile={isMobile}>
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-            gap: "12px",
+            gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(auto-fit, minmax(200px, 1fr))",
+            gap: isMobile ? "8px" : "12px",
           }}
         >
-          <InfoCard title="Expected Salary" value={job.compensation?.expectedSalary || "Not specified"} />
-          <InfoCard title="Offered Salary" value={job.compensation?.offeredSalary || "Not specified"} />
+          <InfoCard title="Expected Salary" value={job.compensation?.expectedSalary || "Not specified"} isMobile={isMobile} />
+          <InfoCard title="Offered Salary" value={job.compensation?.offeredSalary || "Not specified"} isMobile={isMobile} />
         </div>
       </DetailSection>
 
       {/* FOLLOW UP */}
-      <DetailSection title="📅 Follow-up">
+      <DetailSection title="📅 Follow-up" isMobile={isMobile}>
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-            gap: "12px",
+            gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(auto-fit, minmax(200px, 1fr))",
+            gap: isMobile ? "8px" : "12px",
           }}
         >
-          <InfoCard title="Follow-up Date" value={job.followUp?.followUpDate || "Not specified"} />
-          <InfoCard title="Follow-up Status" value={job.followUp?.followUpStatus || "Not specified"} />
+          <InfoCard title="Follow-up Date" value={job.followUp?.followUpDate || "Not specified"} isMobile={isMobile} />
+          <InfoCard title="Follow-up Status" value={job.followUp?.followUpStatus || "Not specified"} isMobile={isMobile} />
         </div>
       </DetailSection>
 
       {/* NEXT ACTION */}
-      <DetailSection title="🚀 Next Action">
-        <ContentBox value={job.nextAction || "No next action specified."} />
+      <DetailSection title="🚀 Next Action" isMobile={isMobile}>
+        <ContentBox value={job.nextAction || "No next action specified."} isMobile={isMobile} />
       </DetailSection>
 
       {/* FINAL ASSESSMENT */}
-      <DetailSection title="🏁 Final Assessment">
-        <InfoRow label="Final Result" value={job.final?.result || "Not available"} />
-        <InfoRow label="Result Date" value={job.final?.resultDate || "Not available"} />
-        <InfoRow label="Full Experience" value={job.final?.fullExperience || "Not available"} />
-        <InfoRow label="Final Recommendation / Upgrade Plan" value={job.final?.finalRecommendation || "Not available"} />
+      <DetailSection title="🏁 Final Assessment" isMobile={isMobile}>
+        <InfoRow label="Final Result" value={job.final?.result || "Not available"} isMobile={isMobile} />
+        <InfoRow label="Result Date" value={job.final?.resultDate || "Not available"} isMobile={isMobile} />
+        <InfoRow label="Full Experience" value={job.final?.fullExperience || "Not available"} isMobile={isMobile} />
+        <InfoRow label="Final Recommendation / Upgrade Plan" value={job.final?.finalRecommendation || "Not available"} isMobile={isMobile} />
       </DetailSection>
 
       {/* CUSTOM FIELDS */}
       {job.customFields && job.customFields.length > 0 && (
-        <DetailSection title="🧩 Custom Fields">
+        <DetailSection title="🧩 Custom Fields" isMobile={isMobile}>
           {job.customFields.map((field) => (
-            <InfoRow key={field.id} label={field.name || "Custom Field"} value={field.value || "Empty"} />
+            <InfoRow key={field.id} label={field.name || "Custom Field"} value={field.value || "Empty"} isMobile={isMobile} />
           ))}
         </DetailSection>
       )}
 
       {/* RECORD INFO */}
-      <DetailSection title="🕒 Record Information">
+      <DetailSection title="🕒 Record Information" isMobile={isMobile}>
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-            gap: "12px",
+            gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(auto-fit, minmax(200px, 1fr))",
+            gap: isMobile ? "8px" : "12px",
           }}
         >
-          <InfoCard title="Created At" value={job.createdAt || "Not available"} />
-          <InfoCard title="Updated At" value={job.updatedAt || "Not available"} />
+          <InfoCard title="Created At" value={job.createdAt || "Not available"} isMobile={isMobile} />
+          <InfoCard title="Updated At" value={job.updatedAt || "Not available"} isMobile={isMobile} />
         </div>
       </DetailSection>
     </div>
@@ -666,19 +1148,21 @@ function JobDetails({
 }
 
 /* =========================================================
-   VIVA DETAILS
+   VIVA DETAILS (Responsive)
    ========================================================= */
 
 function VivaDetails({
   number,
   viva,
+  isMobile = false,
 }: {
   number: number;
   viva: JobApplication["viva1"];
+  isMobile?: boolean;
 }) {
   const hasData =
     !!viva &&
-    (!!viva.date ||
+    (!!viva?.date ||
       Number(viva?.performancePercentage) > 0 ||
       !!viva?.rehearsal?.chatgpt ||
       !!viva?.rehearsal?.deepseek ||
@@ -698,35 +1182,35 @@ function VivaDetails({
   }
 
   return (
-    <DetailSection title={`🎤 Viva ${number}`}>
+    <DetailSection title={`🎤 Viva ${number}`} isMobile={isMobile}>
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-          gap: "12px",
-          marginBottom: "15px",
+          gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(auto-fit, minmax(180px, 1fr))",
+          gap: isMobile ? "8px" : "12px",
+          marginBottom: isMobile ? "10px" : "15px",
         }}
       >
-        <InfoCard title="Date" value={viva?.date || "Not specified"} />
-        <InfoCard title="Performance" value={`${Number(viva?.performancePercentage) || 0}%`} />
+        <InfoCard title="Date" value={viva?.date || "Not specified"} isMobile={isMobile} />
+        <InfoCard title="Performance" value={`${Number(viva?.performancePercentage) || 0}%`} isMobile={isMobile} />
       </div>
 
-      <DetailSection title="🎙️ AI Rehearsal">
-        <AIItem name="ChatGPT" value={viva?.rehearsal?.chatgpt} />
-        <AIItem name="DeepSeek" value={viva?.rehearsal?.deepseek} />
-        <AIItem name="Grok" value={viva?.rehearsal?.grok} />
-        <AIItem name="Gemini" value={viva?.rehearsal?.gemini} />
-        <AIItem name="Copilot" value={viva?.rehearsal?.copilot} />
-        <AIItem name="Claude" value={viva?.rehearsal?.claude} />
+      <DetailSection title="🎙️ AI Rehearsal" isMobile={isMobile}>
+        <AIItem name="ChatGPT" value={viva?.rehearsal?.chatgpt} isMobile={isMobile} />
+        <AIItem name="DeepSeek" value={viva?.rehearsal?.deepseek} isMobile={isMobile} />
+        <AIItem name="Grok" value={viva?.rehearsal?.grok} isMobile={isMobile} />
+        <AIItem name="Gemini" value={viva?.rehearsal?.gemini} isMobile={isMobile} />
+        <AIItem name="Copilot" value={viva?.rehearsal?.copilot} isMobile={isMobile} />
+        <AIItem name="Claude" value={viva?.rehearsal?.claude} isMobile={isMobile} />
       </DetailSection>
 
-      <QuestionGroup title="✅ Easily Answered" items={viva?.easilyAnsweredQuestions || []} />
-      <QuestionGroup title="🟡 Partially Answered" items={viva?.partiallyAnsweredQuestions || []} />
-      <QuestionGroup title="🔴 Unknown Questions" items={viva?.unknownQuestions || []} />
+      <QuestionGroup title="✅ Easily Answered" items={viva?.easilyAnsweredQuestions || []} isMobile={isMobile} />
+      <QuestionGroup title="🟡 Partially Answered" items={viva?.partiallyAnsweredQuestions || []} isMobile={isMobile} />
+      <QuestionGroup title="🔴 Unknown Questions" items={viva?.unknownQuestions || []} isMobile={isMobile} />
 
-      <InfoRow label="💪 Strengths" value={viva?.strengths || "Not recorded"} />
-      <InfoRow label="⚠️ Weaknesses" value={viva?.weaknesses || "Not recorded"} />
-      <InfoRow label="🚀 Improvement" value={viva?.improvement || "Not recorded"} />
+      <InfoRow label="💪 Strengths" value={viva?.strengths || "Not recorded"} isMobile={isMobile} />
+      <InfoRow label="⚠️ Weaknesses" value={viva?.weaknesses || "Not recorded"} isMobile={isMobile} />
+      <InfoRow label="🚀 Improvement" value={viva?.improvement || "Not recorded"} isMobile={isMobile} />
     </DetailSection>
   );
 }
@@ -738,19 +1222,21 @@ function VivaDetails({
 function QuestionGroup({
   title,
   items,
+  isMobile = false,
 }: {
   title: string;
   items: string[];
+  isMobile?: boolean;
 }) {
   return (
-    <div style={{ marginBottom: "14px" }}>
-      <strong>{title}</strong>
+    <div style={{ marginBottom: isMobile ? "8px" : "14px" }}>
+      <strong style={{ fontSize: isMobile ? "13px" : "14px" }}>{title}</strong>
       {items.length === 0 ? (
-        <div style={{ color: "#999", fontSize: "12px", marginTop: "6px" }}>None</div>
+        <div style={{ color: "#999", fontSize: isMobile ? "10px" : "12px", marginTop: "4px" }}>None</div>
       ) : (
-        <ol style={{ marginTop: "7px", paddingLeft: "22px" }}>
+        <ol style={{ marginTop: "5px", paddingLeft: isMobile ? "16px" : "22px", fontSize: isMobile ? "12px" : "13px" }}>
           {items.map((item, index) => (
-            <li key={`${index}-${item}`} style={{ marginBottom: "6px", lineHeight: 1.5 }}>
+            <li key={`${index}-${item}`} style={{ marginBottom: isMobile ? "3px" : "6px", lineHeight: 1.5 }}>
               {item}
             </li>
           ))}
@@ -761,7 +1247,7 @@ function QuestionGroup({
 }
 
 /* =========================================================
-   HELPER COMPONENTS
+   HELPER COMPONENTS (Responsive)
    ========================================================= */
 
 function PageCenter({ children }: { children: React.ReactNode }) {
@@ -783,54 +1269,56 @@ function PageCenter({ children }: { children: React.ReactNode }) {
   );
 }
 
-function KpiCard({ title, value, icon }: { title: string; value: number; icon: string }) {
+function KpiCard({ title, value, icon, isMobile = false }: { title: string; value: number; icon: string; isMobile?: boolean }) {
   return (
     <div
       style={{
         background: "#ffffff",
-        padding: "20px",
+        padding: isMobile ? "10px 8px" : "20px",
         borderRadius: "12px",
         boxShadow: "0 4px 15px rgba(0,0,0,0.05)",
+        textAlign: "center",
       }}
     >
-      <div style={{ fontSize: "25px" }}>{icon}</div>
-      <div style={{ marginTop: "10px", fontSize: "28px", fontWeight: 700 }}>{value}</div>
-      <div style={{ marginTop: "4px", color: "#666", fontSize: "13px" }}>{title}</div>
+      <div style={{ fontSize: isMobile ? "20px" : "25px" }}>{icon}</div>
+      <div style={{ marginTop: "4px", fontSize: isMobile ? "20px" : "28px", fontWeight: 700 }}>{value}</div>
+      <div style={{ marginTop: "2px", color: "#666", fontSize: isMobile ? "10px" : "13px" }}>{title}</div>
     </div>
   );
 }
 
-function InfoCard({ title, value }: { title: string; value: string }) {
+function InfoCard({ title, value, isMobile = false }: { title: string; value: string; isMobile?: boolean }) {
   return (
-    <div style={{ background: "#f6f8fa", padding: "13px", borderRadius: "8px" }}>
-      <div style={{ color: "#777", fontSize: "11px", marginBottom: "5px" }}>{title}</div>
-      <strong style={{ wordBreak: "break-word" }}>{value}</strong>
+    <div style={{ background: "#f6f8fa", padding: isMobile ? "8px 10px" : "13px", borderRadius: "8px" }}>
+      <div style={{ color: "#777", fontSize: isMobile ? "9px" : "11px", marginBottom: "2px" }}>{title}</div>
+      <strong style={{ wordBreak: "break-word", fontSize: isMobile ? "12px" : "14px" }}>{value}</strong>
     </div>
   );
 }
 
-function DetailSection({ title, children }: { title: string; children: React.ReactNode }) {
+function DetailSection({ title, children, isMobile = false }: { title: string; children: React.ReactNode; isMobile?: boolean }) {
   return (
-    <div style={{ marginTop: "25px" }}>
-      <h3 style={{ marginBottom: "12px" }}>{title}</h3>
+    <div style={{ marginTop: isMobile ? "14px" : "25px" }}>
+      <h3 style={{ marginBottom: isMobile ? "8px" : "12px", fontSize: isMobile ? "15px" : "18px" }}>{title}</h3>
       <div>{children}</div>
     </div>
   );
 }
 
-function ContentBox({ value }: { value: string }) {
+function ContentBox({ value, isMobile = false }: { value: string; isMobile?: boolean }) {
   return (
     <div
       style={{
         background: "#f6f8fa",
         border: "1px solid #e5e7eb",
         borderRadius: "9px",
-        padding: "15px",
+        padding: isMobile ? "10px" : "15px",
         whiteSpace: "pre-wrap",
         lineHeight: 1.6,
         color: value ? "#444" : "#999",
-        minHeight: "45px",
+        minHeight: isMobile ? "30px" : "45px",
         wordBreak: "break-word",
+        fontSize: isMobile ? "12px" : "14px",
       }}
     >
       {value}
@@ -838,15 +1326,15 @@ function ContentBox({ value }: { value: string }) {
   );
 }
 
-function Badge({ label, active }: { label: string; active: boolean }) {
+function Badge({ label, active, isMobile = false }: { label: string; active: boolean; isMobile?: boolean }) {
   return (
     <span
       style={{
-        padding: "7px 11px",
+        padding: isMobile ? "4px 8px" : "7px 11px",
         borderRadius: "15px",
         background: active ? "#e7f5e9" : "#f1f1f1",
         color: active ? "#176b2c" : "#777",
-        fontSize: "12px",
+        fontSize: isMobile ? "10px" : "12px",
         fontWeight: 600,
       }}
     >
@@ -855,22 +1343,22 @@ function Badge({ label, active }: { label: string; active: boolean }) {
   );
 }
 
-function TagGroup({ title, items }: { title: string; items: string[] }) {
+function TagGroup({ title, items, isMobile = false }: { title: string; items: string[]; isMobile?: boolean }) {
   return (
-    <div style={{ marginBottom: "15px" }}>
-      {title && <strong>{title}</strong>}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "7px", marginTop: title ? "7px" : "0" }}>
+    <div style={{ marginBottom: isMobile ? "8px" : "15px" }}>
+      {title && <strong style={{ fontSize: isMobile ? "12px" : "13px" }}>{title}</strong>}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: isMobile ? "4px" : "7px", marginTop: title ? "4px" : "0" }}>
         {!items || items.length === 0 ? (
-          <span style={{ color: "#999", fontSize: "12px" }}>None</span>
+          <span style={{ color: "#999", fontSize: isMobile ? "10px" : "12px" }}>None</span>
         ) : (
           items.map((item, index) => (
             <span
               key={`${item}-${index}`}
               style={{
-                padding: "6px 10px",
+                padding: isMobile ? "3px 7px" : "6px 10px",
                 background: "#f1f5ff",
                 borderRadius: "12px",
-                fontSize: "12px",
+                fontSize: isMobile ? "10px" : "12px",
               }}
             >
               {item}
@@ -882,25 +1370,26 @@ function TagGroup({ title, items }: { title: string; items: string[] }) {
   );
 }
 
-function AIItem({ name, value }: { name: string; value?: string }) {
+function AIItem({ name, value, isMobile = false }: { name: string; value?: string; isMobile?: boolean }) {
   return (
     <div
       style={{
-        marginBottom: "12px",
-        padding: "13px",
+        marginBottom: isMobile ? "8px" : "12px",
+        padding: isMobile ? "8px 10px" : "13px",
         background: "#f6f8fa",
         borderRadius: "9px",
         border: "1px solid #e5e7eb",
       }}
     >
-      <strong>{name}</strong>
+      <strong style={{ fontSize: isMobile ? "12px" : "13px" }}>{name}</strong>
       <div
         style={{
-          marginTop: "7px",
+          marginTop: "4px",
           whiteSpace: "pre-wrap",
           lineHeight: 1.5,
           color: value ? "#444" : "#999",
           wordBreak: "break-word",
+          fontSize: isMobile ? "12px" : "13px",
         }}
       >
         {value || "Not prepared yet"}
@@ -909,16 +1398,19 @@ function AIItem({ name, value }: { name: string; value?: string }) {
   );
 }
 
-function InfoRow({ label, value }: { label: string; value: string }) {
+function InfoRow({ label, value, isMobile = false }: { label: string; value: string; isMobile?: boolean }) {
   return (
-    <div style={{ padding: "13px", marginBottom: "10px", background: "#f6f8fa", borderRadius: "8px" }}>
-      <div style={{ color: "#777", fontSize: "12px", fontWeight: 600, marginBottom: "5px" }}>{label}</div>
+    <div style={{ padding: isMobile ? "8px 10px" : "13px", marginBottom: isMobile ? "6px" : "10px", background: "#f6f8fa", borderRadius: "8px" }}>
+      <div style={{ color: "#777", fontSize: isMobile ? "10px" : "12px", fontWeight: 600, marginBottom: "3px" }}>
+        {label}
+      </div>
       <div
         style={{
           whiteSpace: "pre-wrap",
           color: value ? "#444" : "#999",
           lineHeight: 1.5,
           wordBreak: "break-word",
+          fontSize: isMobile ? "12px" : "14px",
         }}
       >
         {value}
